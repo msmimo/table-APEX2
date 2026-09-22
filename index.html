@@ -408,9 +408,19 @@ async function loadRecords() {
     const data = await res.json();
     setSyncStatus('Synchronisé ✓', 'ok');
     Object.keys(dataStore).forEach(k => delete dataStore[k]);
+    // data trié par date décroissante -> 1re occurrence = la plus récente
+    const latestForPart = {}; // pièce -> position de sa lecture la plus récente
     (data || []).forEach(r => {
       const key = r[COL_POSITION];
-      if (key && !dataStore[key]) dataStore[key] = { value: r[COL_VALUE], date: r[COL_SCANNED] };
+      const part = r[COL_VALUE];
+      if (key && !dataStore[key]) dataStore[key] = { value: part, date: r[COL_SCANNED] };
+      if (part != null && latestForPart[part] === undefined) latestForPart[part] = key;
+    });
+    // Une pièce n'appartient qu'à sa position la plus récente : si elle a été
+    // rescannée ailleurs, l'ancienne position est maintenant vide.
+    Object.keys(dataStore).forEach(key => {
+      const part = dataStore[key].value;
+      if (part != null && latestForPart[part] !== key) delete dataStore[key];
     });
     SEAT_ORDER.forEach(s => {
       FACES.forEach(f => {
@@ -622,10 +632,18 @@ async function loadSnapshot() {
 
     // Build map: position -> latest value at that time
     const snap = {};
+    const latestForPart = {}; // pièce -> position de sa lecture la plus récente (à cette date)
     (data || []).forEach(r => {
-      if (r[COL_POSITION] && !snap[r[COL_POSITION]]) {
-        snap[r[COL_POSITION]] = r[COL_VALUE];
-      }
+      const pos = r[COL_POSITION];
+      const part = r[COL_VALUE];
+      if (pos && !snap[pos]) snap[pos] = part;
+      if (part != null && latestForPart[part] === undefined) latestForPart[part] = pos;
+    });
+    // Une pièce n'apparaît qu'à sa position la plus récente ; les positions
+    // qu'elle a quittées sont vides.
+    Object.keys(snap).forEach(pos => {
+      const part = snap[pos];
+      if (part != null && latestForPart[part] !== pos) delete snap[pos];
     });
 
     // Render 5 seat diagrams
